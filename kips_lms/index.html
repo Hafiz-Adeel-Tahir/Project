@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SkillRise LMS</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">SkillRise LMS</div>
+    <nav>
+      <button data-view="home">Home</button>
+      <button data-view="courses">Courses</button>
+      <button data-view="dashboard">Dashboard</button>
+      <button data-view="admin">Admin Demo</button>
+    </nav>
+    <div class="user-chip">Student: Ali</div>
+  </header>
+
+  <main id="app"></main>
+
+  <template id="home-template">
+    <section class="hero">
+      <div>
+        <span class="pill">Urdu + English Learning Platform</span>
+        <h1>Learn digital skills from anywhere.</h1>
+        <p>Recorded lectures, quizzes, assignments, progress tracking and verifiable certificates.</p>
+        <button class="primary" data-action="browse">Browse Courses</button>
+      </div>
+      <div class="hero-card">
+        <h3>Platform Snapshot</h3>
+        <div class="stats">
+          <div><strong>6</strong><span>Courses</span></div>
+          <div><strong>24</strong><span>Lectures</span></div>
+          <div><strong>5</strong><span>Quizzes</span></div>
+          <div><strong>1</strong><span>Certificate</span></div>
+        </div>
+      </div>
+    </section>
+    <section>
+      <h2>Popular Courses</h2>
+      <div id="featured-courses" class="grid"></div>
+    </section>
+  </template>
+
+  <template id="courses-template">
+    <section class="page-head">
+      <div>
+        <h1>All Courses</h1>
+        <p>Select a course and start learning.</p>
+      </div>
+      <input id="course-search" placeholder="Search courses..." />
+    </section>
+    <div id="courses-grid" class="grid"></div>
+  </template>
+
+  <template id="dashboard-template">
+    <section class="page-head">
+      <div>
+        <h1>Student Dashboard</h1>
+        <p>Track your progress and continue learning.</p>
+      </div>
+    </section>
+    <div class="dashboard-grid">
+      <section class="panel">
+        <h2>My Courses</h2>
+        <div id="my-courses"></div>
+      </section>
+      <section class="panel">
+        <h2>Achievements</h2>
+        <div class="achievement">🏅 First Lecture Completed</div>
+        <div class="achievement">🎯 Quiz Score Above 70%</div>
+        <button class="primary" data-action="certificate">View Certificate</button>
+      </section>
+    </div>
+  </template>
+
+  <template id="admin-template">
+    <section class="page-head">
+      <div>
+        <h1>Admin Dashboard Demo</h1>
+        <p>Manage courses, users, enrollments and reports.</p>
+      </div>
+    </section>
+    <div class="stats admin-stats">
+      <div><strong>1,250</strong><span>Students</span></div>
+      <div><strong>18</strong><span>Instructors</span></div>
+      <div><strong>32</strong><span>Courses</span></div>
+      <div><strong>76%</strong><span>Completion Rate</span></div>
+    </div>
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Course Management</h2>
+        <button class="primary" data-action="add-course">+ Add Course</button>
+      </div>
+      <table>
+        <thead><tr><th>Course</th><th>Instructor</th><th>Students</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>Freelancing</td><td>Sarah Khan</td><td>420</td><td><span class="status live">Live</span></td></tr>
+          <tr><td>Graphic Design</td><td>Usman Ali</td><td>315</td><td><span class="status live">Live</span></td></tr>
+          <tr><td>Digital Marketing</td><td>Ayesha Noor</td><td>280</td><td><span class="status draft">Draft</span></td></tr>
+        </tbody>
+      </table>
+    </section>
+  </template>
+
+  <div id="modal" class="modal hidden">
+    <div class="modal-card">
+      <button class="close" data-action="close-modal">×</button>
+      <div id="modal-content"></div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
