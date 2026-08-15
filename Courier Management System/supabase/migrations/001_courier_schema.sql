@@ -1,0 +1,41 @@
+create extension if not exists pgcrypto;
+create type public.app_role as enum ('admin','manager','staff');
+create type public.parcel_status as enum ('booked','picked_up','in_transit','out_for_delivery','delivered','delivery_failed','returned','cancelled');
+create type public.pod_type as enum ('photo','signature','otp');
+create type public.notice_channel as enum ('whatsapp','sms');
+
+create table public.users(id uuid primary key references auth.users(id) on delete cascade,full_name text not null,role app_role not null default 'staff',created_at timestamptz not null default now(),updated_at timestamptz not null default now());
+create table public.zones(id uuid primary key default gen_random_uuid(),name text not null unique,city text not null default 'Lahore',created_at timestamptz not null default now());
+create table public.hubs_checkpoints(id uuid primary key default gen_random_uuid(),name text not null,location text not null,zone_id uuid references public.zones(id),active boolean not null default true,created_at timestamptz not null default now());
+create table public.parcels(id uuid primary key default gen_random_uuid(),tracking_id text not null unique,sender_name text not null,sender_phone text,receiver_name text not null,receiver_phone text,pickup_address text not null,delivery_address text not null,current_status parcel_status not null default 'booked',assigned_rider_name text,current_hub_id uuid references public.hubs_checkpoints(id),zone_id uuid references public.zones(id),created_by uuid references public.users(id),created_at timestamptz not null default now(),updated_at timestamptz not null default now(),estimated_delivery_date date,delivered_at timestamptz,locked_at timestamptz);
+create table public.parcel_status_history(id bigint generated always as identity primary key,parcel_id uuid not null references public.parcels(id) on delete cascade,status parcel_status not null,occurred_at timestamptz not null default now(),updated_by uuid references public.users(id),rider_name text,hub_id uuid references public.hubs_checkpoints(id),location text,notes text);
+create table public.not_delivered_reasons(id bigint generated always as identity primary key,parcel_id uuid not null references public.parcels(id) on delete cascade,reason text not null check(reason in ('Customer Unavailable','Wrong Address','Refused','Other')),details text,reattempt_scheduled_at timestamptz,created_by uuid references public.users(id),created_at timestamptz not null default now());
+create table public.proof_of_delivery(id uuid primary key default gen_random_uuid(),parcel_id uuid not null references public.parcels(id) on delete cascade,type pod_type not null,storage_path text,otp_hash text,captured_by uuid references public.users(id),rider_name text,captured_at timestamptz not null default now());
+create table public.notifications_log(id bigint generated always as identity primary key,parcel_id uuid not null references public.parcels(id) on delete cascade,channel notice_channel not null,status_sent parcel_status not null,recipient_masked text,provider_response jsonb,created_at timestamptz not null default now());
+create index parcels_status_idx on public.parcels(current_status);
+create index parcels_created_idx on public.parcels(created_at);
+create index parcels_zone_idx on public.parcels(zone_id);
+create index history_parcel_time_idx on public.parcel_status_history(parcel_id,occurred_at);
+
+create or replace function public.is_operator() returns boolean language sql stable security definer set search_path=public as $$select exists(select 1 from public.users where id=auth.uid() and role in ('admin','manager','staff'))$$;
+create or replace function public.is_manager() returns boolean language sql stable security definer set search_path=public as $$select exists(select 1 from public.users where id=auth.uid() and role in ('admin','manager'))$$;
+create or replace function public.is_admin() returns boolean language sql stable security definer set search_path=public as $$select exists(select 1 from public.users where id=auth.uid() and role='admin')$$;
+create or replace function public.track_parcel(p_tracking_id text) returns table(tracking_id text,current_status parcel_status,estimated_delivery_date date,delivery_area text,status parcel_status,occurred_at timestamptz,location text,notes text) language sql stable security definer set search_path=public as $$select p.tracking_id,p.current_status,p.estimated_delivery_date,p.delivery_address,h.status,h.occurred_at,coalesce(h.location,hc.name),h.notes from public.parcels p left join public.parcel_status_history h on h.parcel_id=p.id left join public.hubs_checkpoints hc on hc.id=h.hub_id where p.tracking_id=upper(trim(p_tracking_id)) order by h.occurred_at$$;
+grant execute on function public.track_parcel(text) to anon,authenticated;
+create or replace function public.audit_parcel_status() returns trigger language plpgsql security definer set search_path=public as $$begin new.updated_at=now();if old.locked_at is not null and not public.is_admin() then raise exception 'Delivered parcel is locked';end if;if new.current_status is distinct from old.current_status then if new.current_status='delivered' then new.delivered_at=now();new.locked_at=now();end if;insert into public.parcel_status_history(parcel_id,status,updated_by,rider_name,hub_id) values(new.id,new.current_status,auth.uid(),new.assigned_rider_name,new.current_hub_id);insert into public.notifications_log(parcel_id,channel,status_sent) values(new.id,'whatsapp',new.current_status),(new.id,'sms',new.current_status);end if;return new;end$$;
+create trigger parcels_status_audit before update on public.parcels for each row execute function public.audit_parcel_status();
+
+alter table public.users enable row level security;alter table public.zones enable row level security;alter table public.hubs_checkpoints enable row level security;alter table public.parcels enable row level security;alter table public.parcel_status_history enable row level security;alter table public.not_delivered_reasons enable row level security;alter table public.proof_of_delivery enable row level security;alter table public.notifications_log enable row level security;
+create policy users_self_read on public.users for select using(id=auth.uid() or public.is_admin());
+create policy users_admin_all on public.users for all using(public.is_admin()) with check(public.is_admin());
+create policy zones_operator_all on public.zones for all using(public.is_operator()) with check(public.is_manager());
+create policy hubs_operator_all on public.hubs_checkpoints for all using(public.is_operator()) with check(public.is_manager());
+create policy parcels_operator_all on public.parcels for all using(public.is_operator()) with check(public.is_operator());
+create policy history_operator_all on public.parcel_status_history for all using(public.is_operator()) with check(public.is_operator());
+create policy failed_operator_all on public.not_delivered_reasons for all using(public.is_operator()) with check(public.is_operator());
+create policy pod_operator_all on public.proof_of_delivery for all using(public.is_operator()) with check(public.is_operator());
+create policy notices_operator_read on public.notifications_log for select using(public.is_operator());
+insert into storage.buckets(id,name,public) values('proof-of-delivery','proof-of-delivery',false) on conflict(id) do nothing;
+create policy pod_storage_read on storage.objects for select to authenticated using(bucket_id='proof-of-delivery' and public.is_operator());
+create policy pod_storage_write on storage.objects for insert to authenticated with check(bucket_id='proof-of-delivery' and public.is_operator());
+alter publication supabase_realtime add table public.parcels,public.parcel_status_history;
